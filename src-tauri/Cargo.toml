@@ -1,0 +1,53 @@
+[package]
+name = "pp-scribe"
+version = "0.1.0"
+description = "Meeting transcription: live captions + accurate post-meeting transcript"
+authors = ["Umut Cetin"]
+edition = "2021"
+
+[lib]
+name = "pp_scribe_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri core
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-store = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Audio (cpal >= 0.17 adds macOS system-audio loopback via CoreAudio process taps)
+cpal = "0.18.2"
+rubato = "0.16.2"
+hound = "3.5.1"
+rustfft = "6.4.0"
+
+# Speech-to-text
+transcribe-rs = "0.1.4"
+vad-rs = { git = "https://github.com/cjpais/vad-rs", default-features = false }
+
+# Model downloads
+reqwest = { version = "0.12", features = ["stream"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
+flate2 = "1"
+tar = "0.4"
+
+# Utilities
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
