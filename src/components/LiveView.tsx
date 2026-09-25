@@ -6,6 +6,7 @@ import { clock } from '../lib/format';
 import type { ModelInfo } from '../lib/types';
 import { useApp } from '../stores/appStore';
 import { LevelMeter } from './LevelMeter';
+import { LiveCopyControls } from './LiveCopyControls';
 import { TranscriptView } from './TranscriptView';
 
 function useElapsed(t0: number, running: boolean) {
@@ -19,7 +20,7 @@ function useElapsed(t0: number, running: boolean) {
 }
 
 export function LiveView() {
-  const { recState, active, activeT0, captions, levels, settings } = useApp();
+  const { recState, active, activeT0, captions, copiedIds, levels, settings } = useApp();
   const beginMeeting = useApp((s) => s.beginMeeting);
   const setRecState = useApp((s) => s.setRecState);
   const upsertMeeting = useApp((s) => s.upsertMeeting);
@@ -37,6 +38,11 @@ export function LiveView() {
     () => Object.values(captions).sort((a, b) => a.start_ms - b.start_ms),
     [captions],
   );
+
+  // The marker sits above the first line not yet copied, once anything has been copied.
+  const markerBeforeId = Object.keys(copiedIds).length
+    ? segments.find((s) => !copiedIds[s.id])?.id
+    : undefined;
 
   const labels = {
     me: active?.me_label ?? settings?.me_label ?? 'Me',
@@ -88,6 +94,8 @@ export function LiveView() {
           className="flex-1 min-w-[180px] bg-transparent text-lg font-semibold text-surface-100 placeholder:text-surface-600 outline-none"
         />
 
+        {recording && <LiveCopyControls segments={segments} labels={labels} />}
+
         {recording && (
           <div className="flex items-center gap-4">
             <LevelMeter speaker="me" label={labels.me} level={levels.me} enabled={!!active?.me_device} />
@@ -130,6 +138,7 @@ export function LiveView() {
           segments={segments}
           labels={labels}
           follow
+          markerBeforeId={markerBeforeId}
           empty={<span>Listening… captions appear as people speak.</span>}
         />
       ) : (

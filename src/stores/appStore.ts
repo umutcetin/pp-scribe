@@ -21,6 +21,8 @@ interface AppState {
   /** Local timestamp corresponding to meeting t=0, for the running timer. */
   activeT0: number;
   captions: Record<string, Caption>;
+  /** Live caption ids already put on the clipboard, for "copy new". */
+  copiedIds: Record<string, true>;
   levels: Record<Speaker, number>;
 
   refine: RefineProgress | null;
@@ -38,6 +40,7 @@ interface AppState {
   beginMeeting: (meta: MeetingMeta, elapsedMs: number, captions: Caption[]) => void;
   endMeeting: () => void;
   applyCaption: (c: Caption) => void;
+  markCopied: (ids: string[]) => void;
   setLevel: (speaker: Speaker, level: number) => void;
 
   setRefine: (p: RefineProgress | null) => void;
@@ -58,6 +61,7 @@ export const useApp = create<AppState>((set) => ({
   active: null,
   activeT0: 0,
   captions: {},
+  copiedIds: {},
   levels: { me: 0, them: 0 },
 
   refine: null,
@@ -90,6 +94,7 @@ export const useApp = create<AppState>((set) => ({
       active: meta,
       activeT0: Date.now() - elapsedMs,
       captions: Object.fromEntries(captions.map((c) => [c.id, c])),
+      copiedIds: {},
       levels: { me: 0, them: 0 },
       view: 'live',
     }),
@@ -107,6 +112,8 @@ export const useApp = create<AppState>((set) => ({
       }
       return { captions };
     }),
+  markCopied: (ids) =>
+    set((s) => ({ copiedIds: { ...s.copiedIds, ...Object.fromEntries(ids.map((id) => [id, true as const])) } })),
   setLevel: (speaker, level) => set((s) => ({ levels: { ...s.levels, [speaker]: level } })),
 
   setRefine: (refine) => set({ refine }),

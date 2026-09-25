@@ -10,6 +10,8 @@ interface Props {
   follow?: boolean;
   query?: string;
   empty?: ReactNode;
+  /** Draw a "copied up to here" line above this segment. */
+  markerBeforeId?: string;
 }
 
 const speakerStyle: Record<Speaker, { name: string; bar: string }> = {
@@ -32,7 +34,7 @@ function highlight(text: string, query?: string): ReactNode {
   );
 }
 
-export function TranscriptView({ segments, labels, follow = false, query, empty }: Props) {
+export function TranscriptView({ segments, labels, follow = false, query, empty, markerBeforeId }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [stuck, setStuck] = useState(true);
 
@@ -49,7 +51,7 @@ export function TranscriptView({ segments, labels, follow = false, query, empty 
 
   const q = query?.trim().toLowerCase();
   const visible = q ? segments.filter((s) => s.text.toLowerCase().includes(q)) : segments;
-  const turns = toTurns(visible);
+  const turns = toTurns(visible, markerBeforeId);
 
   return (
     <div className="relative flex-1 min-h-0">
@@ -61,25 +63,34 @@ export function TranscriptView({ segments, labels, follow = false, query, empty 
         ) : (
           <div className="max-w-3xl mx-auto space-y-5">
             {turns.map((turn) => (
-              <div key={turn.key} className="flex gap-3">
-                <div className={`w-0.5 shrink-0 rounded-full ${speakerStyle[turn.speaker].bar}`} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2 mb-0.5">
-                    <span className={`text-sm font-semibold ${speakerStyle[turn.speaker].name}`}>
-                      {labels[turn.speaker]}
-                    </span>
-                    <span className="text-xs font-mono text-surface-500">{clock(turn.start_ms)}</span>
+              <div key={turn.key}>
+                {turn.key === markerBeforeId && (
+                  <div className="flex items-center gap-2 mb-5 text-[11px] text-surface-500">
+                    <div className="flex-1 border-t border-dashed border-surface-700" />
+                    copied up to here
+                    <div className="flex-1 border-t border-dashed border-surface-700" />
                   </div>
-                  <p className="text-[15px] leading-relaxed text-surface-100 select-text">
-                    {turn.items.map((s) => {
-                      const interim = 'is_final' in s && !s.is_final;
-                      return (
-                        <span key={s.id} className={interim ? 'text-surface-400 italic' : undefined}>
-                          {highlight(s.text, query)}{' '}
-                        </span>
-                      );
-                    })}
-                  </p>
+                )}
+                <div className="flex gap-3">
+                  <div className={`w-0.5 shrink-0 rounded-full ${speakerStyle[turn.speaker].bar}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2 mb-0.5">
+                      <span className={`text-sm font-semibold ${speakerStyle[turn.speaker].name}`}>
+                        {labels[turn.speaker]}
+                      </span>
+                      <span className="text-xs font-mono text-surface-500">{clock(turn.start_ms)}</span>
+                    </div>
+                    <p className="text-[15px] leading-relaxed text-surface-100 select-text">
+                      {turn.items.map((s) => {
+                        const interim = 'is_final' in s && !s.is_final;
+                        return (
+                          <span key={s.id} className={interim ? 'text-surface-400 italic' : undefined}>
+                            {highlight(s.text, query)}{' '}
+                          </span>
+                        );
+                      })}
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}

@@ -38,12 +38,13 @@ export interface Turn<T extends Segment = Segment> {
   items: T[];
 }
 
-/** Consecutive segments from the same speaker become one turn. */
-export function toTurns<T extends Segment>(segments: T[]): Turn<T>[] {
+/** Consecutive segments from the same speaker become one turn. `breakBeforeId` forces a
+ *  new turn at that segment (used for the "copied up to here" marker). */
+export function toTurns<T extends Segment>(segments: T[], breakBeforeId?: string): Turn<T>[] {
   const turns: Turn<T>[] = [];
   for (const s of segments) {
     const last = turns[turns.length - 1];
-    if (last && last.speaker === s.speaker) {
+    if (last && last.speaker === s.speaker && s.id !== breakBeforeId) {
       last.items.push(s);
     } else {
       turns.push({ key: s.id, speaker: s.speaker, start_ms: s.start_ms, items: [s] });
