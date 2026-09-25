@@ -87,8 +87,8 @@ pub fn get_active_meeting(manager: Manager) -> Option<ActiveSnapshot> {
 }
 
 #[tauri::command]
-pub fn list_meetings(app: AppHandle, manager: Manager) -> Result<Vec<MeetingMeta>, String> {
-    storage::list(&app, manager.active_id().as_deref()).map_err(err)
+pub fn list_meetings(app: AppHandle) -> Result<Vec<MeetingMeta>, String> {
+    storage::list(&app).map_err(err)
 }
 
 #[tauri::command]

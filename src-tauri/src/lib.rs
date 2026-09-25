@@ -16,6 +16,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
+            if let Err(e) = meeting::storage::repair_interrupted(app.handle()) {
+                eprintln!("[storage] repair failed: {}", e);
+            }
             let models = Arc::new(ModelManager::new(app.handle())?);
             let manager = Arc::new(MeetingManager::new(app.handle(), models));
             manager.preload_live_model();

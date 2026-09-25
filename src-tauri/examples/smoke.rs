@@ -1,5 +1,5 @@
 //! Headless check of the audio + STT pipeline (no Tauri window).
-//!   cargo run --example smoke -- capture   # system-audio + mic capture, live-style segmentation, Parakeet
+//!   cargo run --example smoke -- capture ["BlackHole 2ch"]   # them (system tap or loopback device) + mic, live segmentation, Parakeet
 //!   cargo run --example smoke -- refine <file.wav>   # offline VAD + chunked Whisper
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
@@ -25,11 +25,13 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("refine") => refine(&args[2]),
-        _ => capture(),
+        _ => capture(args.get(2).cloned()),
     }
 }
 
-fn capture() {
+/// `them_device`: capture that input device (e.g. "BlackHole 2ch") instead of the system tap,
+/// and play the test sentence straight into it so nothing is audible.
+fn capture(them_device: Option<String>) {
     let mut engine = ParakeetEngine::new();
     engine
         .load_model_with_params(&support().join("parakeet-tdt-0.6b-v2-int8"), ParakeetModelParams::int8())
@@ -38,7 +40,11 @@ fn capture() {
 
     let (tx, rx) = mpsc::channel::<(String, SegmentEvent)>();
     let mut caps = Vec::new();
-    for (name, src) in [("them", CaptureSource::SystemOutput), ("me", CaptureSource::Input(None))] {
+    let them_src = match &them_device {
+        Some(d) => CaptureSource::Input(Some(d.clone())),
+        None => CaptureSource::SystemOutput,
+    };
+    for (name, src) in [("them", them_src), ("me", CaptureSource::Input(None))] {
         let tx = tx.clone();
         let mut seg = Segmenter::new(&vad(), SegmenterConfig::live()).unwrap();
         let mut total = 0usize;
@@ -66,8 +72,13 @@ fn capture() {
     drop(tx);
 
     std::thread::sleep(Duration::from_millis(500));
+    let mut say_args = vec!["-r", "185"];
+    if let Some(d) = &them_device {
+        say_args.extend(["-a", d.as_str()]);
+    }
     let say = std::process::Command::new("say")
-        .args(["-r", "185", "Hello everyone, thanks for joining. Today we will review the quarterly roadmap and discuss the migration to the new billing system."])
+        .args(say_args)
+        .arg("Hello everyone, thanks for joining. Today we will review the quarterly roadmap and discuss the migration to the new billing system.")
         .spawn()
         .unwrap();
     let mut say = say;

@@ -165,25 +165,37 @@ pub fn load_detail(app: &AppHandle, id: &str) -> Result<MeetingDetail> {
     })
 }
 
-/// All meetings, newest first. Meetings left in `Recording` by a crash are repaired.
-pub fn list(app: &AppHandle, active_id: Option<&str>) -> Result<Vec<MeetingMeta>> {
-    let mut out = Vec::new();
+/// All meetings, newest first.
+pub fn list(app: &AppHandle) -> Result<Vec<MeetingMeta>> {
+    let mut out: Vec<MeetingMeta> = fs::read_dir(root(app)?)?
+        .filter_map(|e| read_meta(&e.ok()?.path()).ok())
+        .collect();
+    out.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    Ok(out)
+}
+
+/// Called once at startup, when nothing can be recording or refining: meetings left in
+/// those states were interrupted by the app quitting or crashing.
+pub fn repair_interrupted(app: &AppHandle) -> Result<()> {
     for entry in fs::read_dir(root(app)?)? {
         let dir = entry?.path();
         let Ok(mut meta) = read_meta(&dir) else { continue };
-        let interrupted = matches!(meta.status, MeetingStatus::Recording | MeetingStatus::Refining)
-            && Some(meta.id.as_str()) != active_id;
-        if interrupted && meta.status == MeetingStatus::Recording {
-            meta.status = MeetingStatus::Recorded;
-            if let Some(last) = read_live(&dir).last() {
-                meta.duration_ms = meta.duration_ms.max(last.end_ms);
+        match meta.status {
+            MeetingStatus::Recording => {
+                meta.status = MeetingStatus::Recorded;
+                if let Some(last) = read_live(&dir).last() {
+                    meta.duration_ms = meta.duration_ms.max(last.end_ms);
+                }
             }
-            let _ = write_meta(&dir, &meta);
+            MeetingStatus::Refining => {
+                meta.status = MeetingStatus::RefineFailed;
+                meta.refine_error = Some("Interrupted — the app was closed while refining".into());
+            }
+            _ => continue,
         }
-        out.push(meta);
+        write_meta(&dir, &meta)?;
     }
-    out.sort_by(|a, b| b.started_at.cmp(&a.started_at));
-    Ok(out)
+    Ok(())
 }
 
 /// Moves the meeting folder to the macOS Trash so a mistaken delete is recoverable.
