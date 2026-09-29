@@ -80,6 +80,7 @@ export function SettingsPanel() {
     api.downloadModel(id).catch(() => {}); // errors arrive via the progress event
   };
 
+  const sttModels = models.filter((m) => m.engine !== 'embedding');
   const liveModel = models.find((m) => m.id === settings.live_model);
   const englishOnlyMismatch = liveModel && !liveModel.multilingual && settings.language !== 'en';
 
@@ -192,7 +193,7 @@ export function SettingsPanel() {
               }
             >
               <select className={field} value={settings.live_model} onChange={(e) => update({ live_model: e.target.value })}>
-                {models.map((m) => (
+                {sttModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
                     {m.is_downloaded ? '' : ' (not downloaded)'}
@@ -203,7 +204,7 @@ export function SettingsPanel() {
 
             <Row label="Accurate transcript model" hint="Runs on the recording after the meeting.">
               <select className={field} value={settings.refine_model} onChange={(e) => update({ refine_model: e.target.value })}>
-                {models.map((m) => (
+                {sttModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
                     {m.is_downloaded ? '' : ' (not downloaded)'}

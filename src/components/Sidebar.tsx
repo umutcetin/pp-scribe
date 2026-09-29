@@ -1,7 +1,8 @@
-import { Loader2, Mic, Settings } from 'lucide-react';
+import { Library, Loader2, Mic, Settings } from 'lucide-react';
 import { dayLabel, duration, timeOfDay } from '../lib/format';
 import type { MeetingMeta } from '../lib/types';
 import { useApp } from '../stores/appStore';
+import { useKnowledge } from '../stores/knowledgeStore';
 
 function groupByDay(meetings: MeetingMeta[]) {
   const groups: { day: string; items: MeetingMeta[] }[] = [];
@@ -16,7 +17,8 @@ function groupByDay(meetings: MeetingMeta[]) {
 
 export function Sidebar() {
   const { meetings, selectedId, view, recState, active } = useApp();
-  const { select, showLive, setSettingsOpen } = useApp.getState();
+  const { select, showLive, showKnowledge, setSettingsOpen } = useApp.getState();
+  const kbStatus = useKnowledge((s) => s.status);
   const recording = recState !== 'idle';
   const past = meetings.filter((m) => m.id !== active?.id);
 
@@ -46,6 +48,20 @@ export function Sidebar() {
             <Mic className="w-4 h-4 text-surface-400" />
           )}
           <span className="truncate">{recording ? active?.title ?? 'Recording…' : 'New meeting'}</span>
+        </button>
+        <button
+          onClick={showKnowledge}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+            view === 'knowledge' ? 'bg-surface-800 text-surface-50' : 'text-surface-300 hover:bg-surface-800/60'
+          }`}
+        >
+          <Library className="w-4 h-4 text-surface-400" />
+          <span className="flex-1 text-left">Knowledge</span>
+          {kbStatus && kbStatus.indexing > 0 ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-surface-500" />
+          ) : (
+            kbStatus && kbStatus.sources > 0 && <span className="text-xs text-surface-500">{kbStatus.sources}</span>
+          )}
         </button>
       </div>
 

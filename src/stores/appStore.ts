@@ -14,7 +14,9 @@ interface AppState {
   meetings: MeetingMeta[];
   /** Meeting shown in the main pane when not looking at the live view. */
   selectedId: string | null;
-  view: 'live' | 'meeting';
+  view: 'live' | 'meeting' | 'knowledge';
+  /** Scroll target when a meeting is opened from a search hit. */
+  meetingFocusMs: number | null;
 
   recState: RecState;
   active: MeetingMeta | null;
@@ -33,8 +35,9 @@ interface AppState {
   setMeetings: (m: MeetingMeta[]) => void;
   upsertMeeting: (m: MeetingMeta) => void;
   removeMeeting: (id: string) => void;
-  select: (id: string | null) => void;
+  select: (id: string | null, focusMs?: number) => void;
   showLive: () => void;
+  showKnowledge: () => void;
 
   setRecState: (s: RecState) => void;
   beginMeeting: (meta: MeetingMeta, elapsedMs: number, captions: Caption[]) => void;
@@ -56,6 +59,7 @@ export const useApp = create<AppState>((set) => ({
   meetings: [],
   selectedId: null,
   view: 'live',
+  meetingFocusMs: null,
 
   recState: 'idle',
   active: null,
@@ -84,8 +88,9 @@ export const useApp = create<AppState>((set) => ({
       selectedId: s.selectedId === id ? null : s.selectedId,
       view: s.selectedId === id ? 'live' : s.view,
     })),
-  select: (id) => set({ selectedId: id, view: id ? 'meeting' : 'live' }),
+  select: (id, focusMs) => set({ selectedId: id, view: id ? 'meeting' : 'live', meetingFocusMs: focusMs ?? null }),
   showLive: () => set({ view: 'live' }),
+  showKnowledge: () => set({ view: 'knowledge' }),
 
   setRecState: (recState) => set({ recState }),
   beginMeeting: (meta, elapsedMs, captions) =>

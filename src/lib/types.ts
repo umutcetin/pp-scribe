@@ -64,7 +64,7 @@ export interface ModelInfo {
   name: string;
   description: string;
   size_mb: number;
-  engine: 'whisper' | 'parakeet';
+  engine: 'whisper' | 'parakeet' | 'embedding';
   multilingual: boolean;
   is_downloaded: boolean;
   is_downloading: boolean;
@@ -88,4 +88,70 @@ export interface DownloadProgress {
   total: number;
   done: boolean;
   error: string | null;
+}
+
+// ---------------------------------------------------------------- knowledge
+
+export type KbKind = 'pdf' | 'docx' | 'md' | 'txt' | 'note' | 'url' | 'meeting';
+export type KbSourceStatus = 'pending' | 'indexing' | 'ready' | 'error' | 'excluded';
+
+export interface KbLocator {
+  page?: number;
+  page_end?: number;
+  heading?: string;
+  start_ms?: number;
+  end_ms?: number;
+}
+
+export interface KbSource {
+  id: number;
+  kind: KbKind;
+  title: string;
+  origin: string | null;
+  file_rel: string | null;
+  added_at: string;
+  status: KbSourceStatus;
+  error: string | null;
+  chunk_count: number;
+  char_count: number;
+}
+
+export interface KbChunk {
+  id: number;
+  source_id: number;
+  ord: number;
+  text: string;
+  locator: KbLocator;
+}
+
+export interface KbSourceDetail {
+  source: KbSource;
+  chunks: KbChunk[];
+  file_path: string | null;
+}
+
+export interface KbHit {
+  chunk_id: number;
+  source_id: number;
+  source_title: string;
+  source_kind: KbKind;
+  origin: string | null;
+  text: string;
+  locator: KbLocator;
+  score: number;
+  keyword: boolean;
+  semantic: number | null;
+}
+
+export interface KbStatus {
+  sources: number;
+  indexing: number;
+  semantic_ready: boolean;
+  missing_embeddings: number;
+  root: string;
+}
+
+export interface KbAddResult {
+  source: KbSource;
+  duplicate: boolean;
 }

@@ -31,6 +31,28 @@ Silero VAD, and local STT via `transcribe-rs` (Parakeet + Whisper/Metal). Nothin
   `meta.json`, `me.wav`, `them.wav`, `live.jsonl`, `refined.json`, `transcript.md`.
   Deleting a meeting moves the folder to the Trash.
 
+## Knowledge (local RAG)
+
+A personal knowledge base next to the meetings — **all indexing and search stay on this Mac**.
+
+- **Add:** PDF, Word (.docx), Markdown/text files (Add → Files…, or drop them on the view), notes
+  (⌘V anywhere in the view, or Add → Note), and web pages (Add → Link, or paste a URL).
+  Meetings are added automatically when they stop (live captions) and refreshed after refine.
+- **Search:** hybrid — SQLite FTS5 keywords + [BGE-M3](https://huggingface.co/BAAI/bge-m3) embeddings
+  (int8 ONNX, 587 MB, downloaded from the Knowledge view), fused with weighted reciprocal rank fusion.
+  Works across Turkish and English. Results jump to the page, heading, or meeting minute.
+- **Storage:** `~/Documents/PPScribe/Knowledge/` — `kb.sqlite` plus `files/` (a copy of every
+  original). Deleting a source moves its file to the Trash.
+- Indexing pauses while a meeting is recording so live captions keep their CPU.
+
+Why BGE-M3 and not multilingual-e5-base: on the smoke set (Turkish questions about English docs and
+vice versa) e5 found the right source first in 1 of 4 cases and scored an unrelated query higher
+than the real answers; BGE-M3 got 4 of 4 with a clear margin. Check with
+`cargo run --example smoke -- kb <db> <files/urls/meeting dirs> -- <queries>`.
+
+Coming next: answers from Claude with citations (only when you switch a question to Claude),
+image paste with OCR + image search, and asking during a live meeting.
+
 ## Run
 
 ```bash

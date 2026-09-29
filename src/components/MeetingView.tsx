@@ -12,6 +12,7 @@ type Tab = 'accurate' | 'live';
 export function MeetingView({ id }: { id: string }) {
   const meta = useApp((s) => s.meetings.find((m) => m.id === id));
   const refine = useApp((s) => (s.refine?.meeting_id === id ? s.refine : null));
+  const focusMs = useApp((s) => s.meetingFocusMs);
   const { toast, upsertMeeting, removeMeeting } = useApp.getState();
 
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
@@ -191,6 +192,7 @@ export function MeetingView({ id }: { id: string }) {
             segments={segments}
             labels={labels}
             query={query}
+            focusMs={focusMs}
             empty={<span>{tab === 'live' ? 'No live captions were saved.' : 'No speech found in the recording.'}</span>}
           />
         </>

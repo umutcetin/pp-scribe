@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowDown } from 'lucide-react';
 import { clock, toTurns } from '../lib/format';
+import { highlight } from '../lib/highlight';
 import type { Caption, Segment, Speaker } from '../lib/types';
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
   empty?: ReactNode;
   /** Draw a "copied up to here" line above this segment. */
   markerBeforeId?: string;
+  /** Scroll to (and briefly highlight) the turn covering this time. */
+  focusMs?: number | null;
 }
 
 const speakerStyle: Record<Speaker, { name: string; bar: string }> = {
@@ -19,24 +22,10 @@ const speakerStyle: Record<Speaker, { name: string; bar: string }> = {
   them: { name: 'text-them-400', bar: 'bg-them-500/60' },
 };
 
-function highlight(text: string, query?: string): ReactNode {
-  const q = query?.trim();
-  if (!q) return text;
-  const parts = text.split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
-  return parts.map((p, i) =>
-    p.toLowerCase() === q.toLowerCase() ? (
-      <mark key={i} className="bg-amber-400/30 text-inherit rounded-sm px-0.5">
-        {p}
-      </mark>
-    ) : (
-      p
-    ),
-  );
-}
-
-export function TranscriptView({ segments, labels, follow = false, query, empty, markerBeforeId }: Props) {
+export function TranscriptView({ segments, labels, follow = false, query, empty, markerBeforeId, focusMs }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [stuck, setStuck] = useState(true);
+  const [flashKey, setFlashKey] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -53,6 +42,18 @@ export function TranscriptView({ segments, labels, follow = false, query, empty,
   const visible = q ? segments.filter((s) => s.text.toLowerCase().includes(q)) : segments;
   const turns = toTurns(visible, markerBeforeId);
 
+  useEffect(() => {
+    if (focusMs == null || turns.length === 0) return;
+    const target = [...turns].reverse().find((t) => t.start_ms <= focusMs + 1000) ?? turns[0];
+    scrollRef.current
+      ?.querySelector(`[data-turn="${CSS.escape(target.key)}"]`)
+      ?.scrollIntoView({ block: 'center' });
+    setFlashKey(target.key);
+    const id = setTimeout(() => setFlashKey(null), 2500);
+    return () => clearTimeout(id);
+    // re-run only when a new focus is requested or the transcript first arrives
+  }, [focusMs, turns.length > 0]);
+
   return (
     <div className="relative flex-1 min-h-0">
       <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 sm:px-8 py-6">
@@ -63,7 +64,11 @@ export function TranscriptView({ segments, labels, follow = false, query, empty,
         ) : (
           <div className="max-w-3xl mx-auto space-y-5">
             {turns.map((turn) => (
-              <div key={turn.key}>
+              <div
+                key={turn.key}
+                data-turn={turn.key}
+                className={`rounded-lg transition-colors duration-700 ${flashKey === turn.key ? 'bg-amber-400/10' : ''}`}
+              >
                 {turn.key === markerBeforeId && (
                   <div className="flex items-center gap-2 mb-5 text-[11px] text-surface-500">
                     <div className="flex-1 border-t border-dashed border-surface-700" />
@@ -85,7 +90,7 @@ export function TranscriptView({ segments, labels, follow = false, query, empty,
                         const interim = 'is_final' in s && !s.is_final;
                         return (
                           <span key={s.id} className={interim ? 'text-surface-400 italic' : undefined}>
-                            {highlight(s.text, query)}{' '}
+                            {highlight(s.text, query?.trim() ? [query.trim()] : [])}{' '}
                           </span>
                         );
                       })}

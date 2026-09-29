@@ -1,6 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   ActiveSnapshot,
+  KbAddResult,
+  KbHit,
+  KbSource,
+  KbSourceDetail,
+  KbStatus,
   AudioDevices,
   MeetingDetail,
   MeetingMeta,
@@ -27,6 +32,20 @@ export const api = {
   exportMeeting: (id: string) => invoke<string>('export_meeting', { id }),
   meetingsRoot: () => invoke<string>('meetings_root'),
   copyText: (text: string) => invoke<void>('copy_text', { text }),
+
+  kbStatus: () => invoke<KbStatus>('kb_status'),
+  kbListSources: () => invoke<KbSource[]>('kb_list_sources'),
+  kbGetSource: (id: number) => invoke<KbSourceDetail>('kb_get_source', { id }),
+  /** One result per path: `{ Ok: KbAddResult } | { Err: string }`. */
+  kbAddFiles: (paths: string[]) =>
+    invoke<({ Ok: KbAddResult } | { Err: string })[]>('kb_add_files', { paths }),
+  kbAddText: (title: string, text: string) => invoke<KbAddResult>('kb_add_text', { title, text }),
+  kbAddUrl: (url: string) => invoke<KbAddResult>('kb_add_url', { url }),
+  kbDeleteSource: (id: number) => invoke<void>('kb_delete_source', { id }),
+  kbReindexSource: (id: number) => invoke<void>('kb_reindex_source', { id }),
+  kbBackfill: () => invoke<void>('kb_backfill'),
+  kbSearch: (query: string, filter?: { kinds?: string[]; source_id?: number }, limit?: number) =>
+    invoke<KbHit[]>('kb_search', { query, filter, limit }),
 };
 
 export function errorText(e: unknown): string {

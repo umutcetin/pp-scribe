@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { api } from '../lib/api';
-import type { Caption, MeetingMeta, RefineProgress, Speaker } from '../lib/types';
+import type { Caption, KbSource, MeetingMeta, RefineProgress, Speaker } from '../lib/types';
 import { useApp } from '../stores/appStore';
+import { useKnowledge } from '../stores/knowledgeStore';
 
 /** Wires backend events into the store and restores state after a reload. */
 export function useBackendEvents() {
@@ -11,6 +12,10 @@ export function useBackendEvents() {
 
     api.getSettings().then(s.setSettings).catch(() => {});
     api.listMeetings().then(s.setMeetings).catch(() => {});
+    const kb = useKnowledge.getState();
+    const refreshKbStatus = () => api.kbStatus().then(useKnowledge.getState().setStatus).catch(() => {});
+    api.kbListSources().then(kb.setSources).catch(() => {});
+    refreshKbStatus();
     api.getActiveMeeting().then((snap) => {
       if (snap) {
         s.beginMeeting(
@@ -46,6 +51,9 @@ export function useBackendEvents() {
         if (e.payload.status === 'refine_failed') st.toast('error', `Refine failed: ${e.payload.refine_error ?? 'unknown error'}`);
       }),
       listen<RefineProgress>('refine-progress', (e) => useApp.getState().setRefine(e.payload)),
+      listen<KbSource>('kb-source', (e) => useKnowledge.getState().upsertSource(e.payload)),
+      listen<number>('kb-removed', (e) => useKnowledge.getState().removeSource(e.payload)),
+      listen('kb-status', refreshKbStatus),
     ]);
 
     return () => {
