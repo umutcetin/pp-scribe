@@ -142,14 +142,15 @@ pub fn meetings_root(app: AppHandle) -> Result<String, String> {
 }
 
 /// WKWebView denies `navigator.clipboard` to the app's custom-scheme page, so copying
-/// goes through pbcopy. LANG keeps non-ASCII text (e.g. Turkish) intact.
+/// goes through pbcopy. GUI apps inherit __CF_USER_TEXT_ENCODING=…:0x0 (MacRoman), which makes
+/// pbcopy mangle non-ASCII text such as Turkish; pin it to UTF-8 (0x08000100).
 #[tauri::command]
 pub fn copy_text(text: String) -> Result<(), String> {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
     let mut child = Command::new("/usr/bin/pbcopy")
-        .env("LANG", "en_US.UTF-8")
+        .env("__CF_USER_TEXT_ENCODING", "0x1F5:0x8000100:0x8000100")
         .stdin(Stdio::piped())
         .spawn()
         .map_err(err)?;
