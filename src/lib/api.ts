@@ -26,6 +26,7 @@ export const api = {
   refineMeeting: (id: string) => invoke<void>('refine_meeting', { id }),
   exportMeeting: (id: string) => invoke<string>('export_meeting', { id }),
   meetingsRoot: () => invoke<string>('meetings_root'),
+  copyText: (text: string) => invoke<void>('copy_text', { text }),
 };
 
 export function errorText(e: unknown): string {

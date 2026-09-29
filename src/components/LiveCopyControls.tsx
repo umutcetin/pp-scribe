@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, ClipboardCopy, Copy } from 'lucide-react';
-import { errorText } from '../lib/api';
+import { api, errorText } from '../lib/api';
 import { toPlainText } from '../lib/format';
 import type { Caption, Speaker } from '../lib/types';
 import { useApp } from '../stores/appStore';
@@ -24,7 +24,7 @@ export function LiveCopyControls({ segments, labels }: Props) {
     async (items: Caption[], what: string) => {
       if (items.length === 0) return;
       try {
-        await navigator.clipboard.writeText(toPlainText(items, labels));
+        await api.copyText(toPlainText(items, labels));
         markCopied(items.map((s) => s.id));
         setFlash(what);
         setTimeout(() => setFlash(null), 1500);

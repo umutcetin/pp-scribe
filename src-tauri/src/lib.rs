@@ -42,6 +42,7 @@ pub fn run() {
             commands::is_refining,
             commands::export_meeting,
             commands::meetings_root,
+            commands::copy_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

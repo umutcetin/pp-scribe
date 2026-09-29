@@ -66,9 +66,13 @@ export function MeetingView({ id }: { id: string }) {
   };
 
   const copy = async () => {
-    await navigator.clipboard.writeText(`${meta.title}\n\n${toPlainText(segments, labels)}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await api.copyText(`${meta.title}\n\n${toPlainText(segments, labels)}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      toast('error', `Copy failed: ${errorText(e)}`);
+    }
   };
 
   const exportMd = async () => {

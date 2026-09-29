@@ -140,3 +140,28 @@ pub fn meetings_root(app: AppHandle) -> Result<String, String> {
         .map(|p| p.to_string_lossy().into_owned())
         .map_err(err)
 }
+
+/// WKWebView denies `navigator.clipboard` to the app's custom-scheme page, so copying
+/// goes through pbcopy. LANG keeps non-ASCII text (e.g. Turkish) intact.
+#[tauri::command]
+pub fn copy_text(text: String) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new("/usr/bin/pbcopy")
+        .env("LANG", "en_US.UTF-8")
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(err)?;
+    child
+        .stdin
+        .take()
+        .ok_or("pbcopy stdin unavailable")?
+        .write_all(text.as_bytes())
+        .map_err(err)?;
+    let status = child.wait().map_err(err)?;
+    if !status.success() {
+        return Err(format!("pbcopy failed ({})", status));
+    }
+    Ok(())
+}
