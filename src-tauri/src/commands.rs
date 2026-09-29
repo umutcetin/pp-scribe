@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager as _, State};
 
 use crate::audio_toolkit::audio::list_output_devices;
 use crate::audio_toolkit::list_input_devices;
@@ -106,6 +106,9 @@ pub fn rename_meeting(app: AppHandle, manager: Manager, id: String, title: Strin
     meta.title = title.trim().to_string();
     storage::write_meta(&dir, &meta).map_err(err)?;
     storage::export_markdown(&app, &id).map_err(err)?;
+    if let Some(kb) = app.try_state::<Arc<crate::knowledge::KnowledgeManager>>() {
+        kb.rename_meeting(&id, &meta.title);
+    }
     Ok(())
 }
 
@@ -114,7 +117,11 @@ pub fn delete_meeting(app: AppHandle, manager: Manager, id: String) -> Result<()
     if manager.active_id().as_deref() == Some(id.as_str()) {
         return Err("Stop the meeting before deleting it".into());
     }
-    storage::trash(&app, &id).map_err(err)
+    storage::trash(&app, &id).map_err(err)?;
+    if let Some(kb) = app.try_state::<Arc<crate::knowledge::KnowledgeManager>>() {
+        kb.forget_meeting(&id);
+    }
+    Ok(())
 }
 
 #[tauri::command]

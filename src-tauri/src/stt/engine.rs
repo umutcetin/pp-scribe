@@ -75,6 +75,9 @@ impl EngineSlot {
                     .map_err(|e| anyhow!("Failed to load {}: {}", model_id, e))?;
                 LoadedEngine::Parakeet(e)
             }
+            EngineType::Embedding => {
+                return Err(anyhow!("{} is not a speech-to-text model", model_id));
+            }
         };
         eprintln!("[stt] loaded {} in {:?}", model_id, started.elapsed());
         *guard = Some((model_id.to_string(), engine));

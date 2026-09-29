@@ -1,6 +1,7 @@
 //! Headless check of the audio + STT pipeline (no Tauri window).
 //!   cargo run --example smoke -- capture ["BlackHole 2ch"]   # them (system tap or loopback device) + mic, live segmentation, Parakeet
 //!   cargo run --example smoke -- refine <file.wav>   # offline VAD + chunked Whisper
+//!   cargo run --example smoke -- kb <db> <file|url|meeting-dir>... -- <query>...   # ingest + hybrid search
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
@@ -25,6 +26,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("refine") => refine(&args[2]),
+        Some("kb") => kb(&args[2..]),
         _ => capture(args.get(2).cloned()),
     }
 }
@@ -114,5 +116,96 @@ fn refine(path: &str) {
             .transcribe_samples(samples[s..e].to_vec(), Some(WhisperInferenceParams { language: Some("en".into()), ..Default::default() }))
             .unwrap();
         println!("[{:.2}-{:.2}] {}", s as f32 / 16000.0, e as f32 / 16000.0, r.text);
+    }
+}
+
+fn kb(args: &[String]) {
+    use pp_scribe_lib::knowledge::{chunk, embed::Embedder, extract, search, store};
+    use pp_scribe_lib::meeting::storage;
+
+    let split = args.iter().position(|a| a == "--").unwrap_or(args.len());
+    let (db, inputs, queries) = (&args[0], &args[1..split], &args[(split + 1).min(args.len())..]);
+    let _ = std::fs::remove_file(db);
+    let st = store::Store::open(std::path::Path::new(db), "smoke").unwrap();
+    use pp_scribe_lib::knowledge::embed;
+    let (dir, spec) = match std::env::var("EMBED").as_deref() {
+        Ok("e5") => ("multilingual-e5-base", embed::E5),
+        _ => ("bge-m3", embed::BGE_M3),
+    };
+    let t = std::time::Instant::now();
+    let embedder = Embedder::load(&dirs_home().join("Library/Application Support/com.ppscribe.app/models").join(dir), spec).unwrap();
+    println!("{dir} loaded in {:?}", t.elapsed());
+
+    for input in inputs {
+        let p = std::path::Path::new(input);
+        let ex = if input.starts_with("http") {
+            match tauri::async_runtime::block_on(extract::url::fetch(input)).unwrap() {
+                extract::url::Fetched::Page(ex) => ex,
+                extract::url::Fetched::Pdf(_) => panic!("pdf url"),
+            }
+        } else if p.join("meta.json").exists() {
+            extract::meeting::from_detail(storage::MeetingDetail {
+                meta: storage::read_meta(p).unwrap(),
+                live: storage::read_live(p),
+                refined: storage::read_refined(p),
+                dir: input.clone(),
+            })
+        } else {
+            match p.extension().and_then(|e| e.to_str()) {
+                Some("pdf") => {
+                    let r = extract::pdf::extract(p).unwrap();
+                    println!("  pdf pages {} (no text: {})", r.pages, r.pages_without_text);
+                    r.extracted
+                }
+                Some("docx") => extract::docx::extract(p).unwrap(),
+                _ => extract::text::from_markdown(&std::fs::read_to_string(p).unwrap(), ""),
+            }
+        };
+        let drafts = chunk::chunk(&ex.blocks);
+        let t = std::time::Instant::now();
+        let texts: Vec<String> = drafts
+            .iter()
+            .map(|d| format!("{}\n{}", ex.title, d.text))
+            .collect();
+        let vecs = embedder.embed_passages(&texts).unwrap();
+        let src = st.insert_source("test", &ex.title, Some(input), None).unwrap();
+        let n = drafts.len();
+        st.replace_chunks(
+            src.id,
+            &ex.title,
+            drafts
+                .into_iter()
+                .zip(vecs)
+                .map(|(d, v)| store::NewChunk { text: d.text, locator: d.locator, embedding: Some(v) })
+                .collect(),
+        )
+        .unwrap();
+        let first = st.chunks_of(src.id).unwrap();
+        let loc = first.first().map(|c| serde_json::to_string(&c.locator).unwrap()).unwrap_or_default();
+        println!("+ '{}' {} blocks -> {} chunks, embedded in {:?}, first locator {}", ex.title, ex.blocks.len(), n, t.elapsed(), loc);
+    }
+
+    for q in queries {
+        let t = std::time::Instant::now();
+        let hits = search::search(&st, Some(&embedder), q, &Default::default(), 3).unwrap();
+        println!("\nQ: {q}   ({:?})", t.elapsed());
+        let qv = embedder.embed_query(q).unwrap();
+        let top = st.vectors.read().unwrap().top_k(&qv, 4, |_| true);
+        let chunks = st.chunks_by_ids(&top.iter().map(|x| x.0).collect::<Vec<_>>()).unwrap();
+        let sources: std::collections::HashMap<i64, String> =
+            st.list_sources().unwrap().into_iter().map(|s| (s.id, s.title)).collect();
+        let sem: Vec<String> = top
+            .iter()
+            .map(|(id, c)| format!("{:.3} {}", c, sources[&chunks[id].source_id].chars().take(18).collect::<String>()))
+            .collect();
+        println!("  semantic: {}", sem.join(" | "));
+        for h in hits {
+            let snippet: String = h.text.chars().take(90).collect::<String>().replace('\n', " ");
+            println!(
+                "  {:.4} kw={} sem={:?} [{}] {} | {}",
+                h.score, h.keyword, h.semantic.map(|s| (s * 1000.0).round() / 1000.0), h.source_title,
+                serde_json::to_string(&h.locator).unwrap(), snippet
+            );
+        }
     }
 }

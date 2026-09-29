@@ -70,6 +70,12 @@ impl MeetingManager {
         )?)
     }
 
+    fn kb(&self) -> Option<Arc<crate::knowledge::KnowledgeManager>> {
+        self.app
+            .try_state::<Arc<crate::knowledge::KnowledgeManager>>()
+            .map(|s| s.inner().clone())
+    }
+
     /// Warm the live model so the first caption isn't delayed by model loading.
     pub fn preload_live_model(self: &Arc<Self>) {
         let this = self.clone();
@@ -246,6 +252,10 @@ impl MeetingManager {
             "meeting-state",
             MeetingStateEvent { state: "stopped", meta: Some(meta.clone()) },
         );
+        // Live captions are searchable right away; refine replaces them later.
+        if let Some(kb) = self.kb() {
+            kb.ingest_meeting(&meta.id);
+        }
 
         if get_settings(&self.app).auto_refine {
             if let Err(e) = self.refine(&meta.id) {
@@ -308,6 +318,9 @@ impl MeetingManager {
             }
             let _ = storage::write_meta(&dir, &meta);
             let _ = storage::export_markdown(&this.app, &meta.id);
+            if let Some(kb) = this.kb() {
+                kb.ingest_meeting(&meta.id);
+            }
             this.refining.store(false, Ordering::SeqCst);
             let _ = this.app.emit("meeting-updated", meta);
         });

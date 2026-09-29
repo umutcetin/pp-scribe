@@ -16,6 +16,8 @@ use tokio::io::AsyncWriteExt;
 pub enum EngineType {
     Whisper,
     Parakeet,
+    /// Text embedding model for the knowledge base (not usable for STT).
+    Embedding,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -35,6 +37,9 @@ pub struct ModelInfo {
     url: String,
     #[serde(skip)]
     is_archive: bool,
+    /// Directory models fetched file by file: (url, file name inside `filename` dir).
+    #[serde(skip)]
+    dir_files: Vec<(String, String)>,
 }
 
 #[derive(Clone, Serialize)]
@@ -73,6 +78,7 @@ fn catalog() -> Vec<ModelInfo> {
         filename: filename.into(),
         url: url.into(),
         is_archive,
+        dir_files: Vec::new(),
     };
     vec![
         m(
@@ -108,6 +114,26 @@ fn catalog() -> Vec<ModelInfo> {
             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin",
             false,
         ),
+        {
+            // bge-m3 over multilingual-e5-base: far better Turkish↔English retrieval in tests.
+            let base = "https://huggingface.co/Xenova/bge-m3/resolve/main";
+            let mut bge = m(
+                "bge-m3",
+                "BGE-M3 (search)",
+                "Semantic search for the knowledge base. Finds Turkish answers to English questions and vice versa.",
+                587,
+                EngineType::Embedding,
+                true,
+                "bge-m3",
+                "",
+                false,
+            );
+            bge.dir_files = vec![
+                (format!("{base}/onnx/model_quantized.onnx"), "model_quantized.onnx".into()),
+                (format!("{base}/tokenizer.json"), "tokenizer.json".into()),
+            ];
+            bge
+        },
     ]
 }
 
@@ -137,17 +163,17 @@ impl ModelManager {
         dirs
     }
 
-    fn locate(&self, filename: &str) -> Option<PathBuf> {
+    fn locate(&self, info: &ModelInfo) -> Option<PathBuf> {
         self.search_dirs()
             .into_iter()
-            .map(|d| d.join(filename))
-            .find(|p| p.exists())
+            .map(|d| d.join(&info.filename))
+            .find(|p| p.exists() && info.dir_files.iter().all(|(_, f)| p.join(f).exists()))
     }
 
     fn refresh(&self) {
         let mut models = self.models.lock().unwrap();
         for m in models.values_mut() {
-            m.is_downloaded = self.locate(&m.filename).is_some();
+            m.is_downloaded = self.locate(m).is_some();
         }
     }
 
@@ -165,7 +191,7 @@ impl ModelManager {
     pub fn path(&self, id: &str) -> Result<(PathBuf, EngineType)> {
         let info = self.info(id).ok_or_else(|| anyhow!("Unknown model: {}", id))?;
         let path = self
-            .locate(&info.filename)
+            .locate(&info)
             .ok_or_else(|| anyhow!("Model '{}' is not downloaded", info.name))?;
         Ok((path, info.engine))
     }
@@ -199,12 +225,10 @@ impl ModelManager {
         result
     }
 
-    async fn download_inner(&self, info: &ModelInfo) -> Result<()> {
-        let partial = self.models_dir.join(format!("{}.partial", info.filename));
-        let response = reqwest::get(&info.url).await?.error_for_status()?;
-        let total = response.content_length().unwrap_or(info.size_mb * 1024 * 1024);
-
-        let mut file = tokio::fs::File::create(&partial).await?;
+    /// Streams `url` to `dest`, reporting progress as `offset + bytes so far` of `total`.
+    async fn fetch(&self, info: &ModelInfo, url: &str, dest: &std::path::Path, offset: u64, total: u64) -> Result<u64> {
+        let response = reqwest::get(url).await?.error_for_status()?;
+        let mut file = tokio::fs::File::create(dest).await?;
         let mut stream = response.bytes_stream();
         let mut downloaded: u64 = 0;
         let mut last_emit: u64 = 0;
@@ -218,7 +242,7 @@ impl ModelManager {
                     "model-download-progress",
                     DownloadProgress {
                         model_id: info.id.clone(),
-                        downloaded,
+                        downloaded: offset + downloaded,
                         total,
                         done: false,
                         error: None,
@@ -227,7 +251,29 @@ impl ModelManager {
             }
         }
         file.flush().await?;
-        drop(file);
+        Ok(downloaded)
+    }
+
+    async fn download_inner(&self, info: &ModelInfo) -> Result<()> {
+        let total = info.size_mb * 1024 * 1024;
+
+        if !info.dir_files.is_empty() {
+            let dir = self.models_dir.join(&info.filename);
+            fs::create_dir_all(&dir)?;
+            let mut offset = 0;
+            for (url, name) in &info.dir_files {
+                if dir.join(name).exists() {
+                    continue;
+                }
+                let partial = dir.join(format!("{name}.partial"));
+                offset += self.fetch(info, url, &partial, offset, total).await?;
+                fs::rename(&partial, dir.join(name))?;
+            }
+            return Ok(());
+        }
+
+        let partial = self.models_dir.join(format!("{}.partial", info.filename));
+        self.fetch(info, &info.url, &partial, 0, total).await?;
 
         if info.is_archive {
             let dir = self.models_dir.clone();
